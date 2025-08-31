@@ -8,6 +8,7 @@ from ultralytics import YOLO
 import cv2
 import math
 from datetime import datetime
+import numpy as np
 import gc  # Garbage collection for memory management
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -40,6 +41,22 @@ def load_model():
     if not MODEL_LOADED:
         try:
             MODEL_PATH = os.environ.get('MODEL_PATH', './model/fire.pt')
+            app.logger.info(f"Attempting to load model from {MODEL_PATH}")
+            
+            # Check if model file exists
+            if not os.path.exists(MODEL_PATH):
+                app.logger.error(f"Model file not found at {MODEL_PATH}")
+                # Try alternate locations
+                alt_paths = ['./model/fire.pt', './fire.pt', '/app/model/fire.pt']
+                for path in alt_paths:
+                    if os.path.exists(path):
+                        app.logger.info(f"Found model at alternate location: {path}")
+                        MODEL_PATH = path
+                        break
+                else:
+                    app.logger.error("Model file not found in any location")
+                    return None
+            
             # Configure model for efficiency
             MODEL = YOLO(MODEL_PATH)
             MODEL_LOADED = True
@@ -109,12 +126,26 @@ def gen_live_stream():
         source_int = int(source)
     except ValueError:
         source_int = source  # keep as string (e.g., RTSP)
+    
+    # Try to open the camera/source
     cap = cv2.VideoCapture(source_int)
+    
+    # If camera/source isn't available, use a placeholder/demo video instead
     if not cap.isOpened():
-        # Return a single empty stream so client can display a message
-        app.logger.warning("Live source not available: %s", source)
-        yield b''
-        return
+        app.logger.warning(f"Live source not available: {source}. Trying fallback video.")
+        # Try to use a fallback demo video
+        fallback_video = os.environ.get('FALLBACK_VIDEO', './video/fire2.mp4')
+        cap = cv2.VideoCapture(fallback_video)
+        
+        # If even the fallback fails, return an error image
+        if not cap.isOpened():
+            app.logger.error("Both live source and fallback video failed.")
+            # Create a blank frame with error message
+            frame = create_error_frame("Camera access unavailable")
+            ok, buffer = cv2.imencode('.jpg', frame)
+            if ok:
+                yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            return
     
     frame_count = 0
     try:
@@ -148,6 +179,13 @@ def gen_live_stream():
                 gc.collect()
     finally:
         cap.release()
+
+def create_error_frame(message):
+    """Create an error message frame to display to the user."""
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    cv2.putText(frame, message, (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    cv2.putText(frame, "Please try uploading a video instead", (50, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+    return frame
 
 def process_video_stream(video_path):
     """Yield processed frames for streaming the uploaded video."""
@@ -246,12 +284,12 @@ def index():
 def health():
     """Basic health check for container orchestrators."""
     status = {
-        "status": "ok",
+        "status": "ok" if MODEL_LOADED else "error",
         "model_loaded": MODEL_LOADED,
         "conf_threshold": CONF_THRESHOLD,
         "alert_threshold": ALERT_THRESHOLD
     }
-    code = 200
+    code = 200 if MODEL_LOADED else 503  # Return 503 if model failed to load
     return jsonify(status), code
 
 @app.route('/demo')
