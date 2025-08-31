@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo - Fire Detection AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <header class="minimal-header">
+        <nav>
+            <div class="logo">
+                <h1>FireGuard<span>AI</span></h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                <li><a href="{{ url_for('live') }}">Live Demo</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <section class="upload-section">
+        <div class="container">
+            <h2>Upload Video for Fire Detection</h2>
+            
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="alert">
+                        {% for message in messages %}
+                            <p>{{ message }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            
+            <div class="upload-card">
+                <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
+                    <div class="file-input">
+                        <label for="video">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <span>Choose video file</span>
+                        </label>
+                        <input type="file" name="video" id="video" accept=".mp4,.mov,.avi,.mkv" required>
+                        <p class="file-name">No file selected</p>
+                    </div>
+                    
+                    <p class="format-info">Supported formats: MP4, MOV, AVI, MKV</p>
+                    
+                    <button type="submit" class="btn primary-btn">
+                        <i class="fas fa-fire"></i> Detect Fire in Real-time
+                    </button>
+                </form>
+            </div>
+            
+            <div class="feature-highlight">
+                <p><i class="fas fa-bolt"></i> Now with real-time detection feedback as your video processes!</p>
+            </div>
+            
+            <div class="demo-options">
+                <p>Want to try live detection instead?</p>
+                <a href="{{ url_for('live') }}" class="btn secondary-btn">
+                    <i class="fas fa-camera"></i> Live Camera Detection
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2023 FireGuard AI. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Update file name display when file is selected
+        document.getElementById('video').addEventListener('change', function() {
+            const fileName = this.files[0] ? this.files[0].name : 'No file selected';
+            document.querySelector('.file-name').textContent = fileName;
+        });
+    </script>
+</body>
+</html>

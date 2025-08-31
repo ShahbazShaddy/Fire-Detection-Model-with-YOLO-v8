@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Detection - Fire Detection AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Alert Modal Styles */
+        .alert-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .alert-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            position: relative;
+            animation: alert-appear 0.3s ease-out;
+            border-top: 5px solid #ff4500;
+        }
+        
+        @keyframes alert-appear {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .alert-content h3 {
+            color: #ff4500;
+            margin-bottom: 15px;
+            font-size: 1.8rem;
+        }
+        
+        .alert-content p {
+            margin-bottom: 20px;
+            font-size: 1.1rem;
+        }
+        
+        .alert-close {
+            background-color: #ff4500;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        .alert-close:hover {
+            background-color: #e03d00;
+        }
+        
+        .alert-icon {
+            font-size: 3rem;
+            color: #ff4500;
+            margin-bottom: 15px;
+            display: block;
+        }
+        
+        .alert-settings {
+            margin-top: 20px;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+        
+        .alert-settings label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <header class="minimal-header">
+        <nav>
+            <div class="logo">
+                <h1>FireGuard<span>AI</span></h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                <li><a href="{{ url_for('demo') }}">Upload Video</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <section class="live-section">
+        <div class="container">
+            <h2>Live Fire Detection</h2>
+            <p>Using your camera feed for real-time fire detection</p>
+            
+            <div class="live-feed">
+                <img src="{{ url_for('live_feed') }}" alt="Live Fire Detection Feed" id="videoFeed">
+            </div>
+            
+            <div class="alert-settings">
+                <label for="alertVolume">Alert Volume:</label>
+                <input type="range" id="alertVolume" min="0" max="1" step="0.1" value="0.7">
+            </div>
+            
+            <div class="camera-controls">
+                <p>Allow camera access in your browser for this feature to work.</p>
+                <a href="{{ url_for('demo') }}" class="btn secondary-btn">
+                    <i class="fas fa-upload"></i> Switch to Video Upload
+                </a>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Alert Modal -->
+    <div class="alert-modal" id="alertModal">
+        <div class="alert-content">
+            <i class="fas fa-fire-alt alert-icon"></i>
+            <h3>High Confidence Fire Detected!</h3>
+            <p>A fire has been detected with over 70% confidence in the current frame.</p>
+            <button class="alert-close" id="alertClose">Acknowledge Alert</button>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2023 FireGuard AI. All rights reserved.</p>
+    </footer>
+    
+    <!-- Add alert sound -->
+    <audio id="alertSound" src="{{ url_for('static', filename='alert.mp3') }}" preload="auto"></audio>
+
+    <script>
+        // Function to detect fire alerts in the video stream
+        let lastAlertTime = 0;
+        const alertCooldown = 5000; // 5 seconds between alerts
+        let alertActive = false;
+        
+        // Observer to detect fire alerts in the video frames
+        function setupFireDetection() {
+            const videoFeed = document.getElementById('videoFeed');
+            
+            // Use a polling mechanism to check for high confidence detections
+            setInterval(() => {
+                const now = Date.now();
+                if (now - lastAlertTime < alertCooldown) {
+                    return; // Still in cooldown period
+                }
+                
+                // Check for text in the current frame that indicates high confidence
+                fetch('/check_high_confidence')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.high_confidence && !alertActive) {
+                            showAlert();
+                            lastAlertTime = now;
+                        }
+                    })
+                    .catch(error => console.error('Error checking for high confidence:', error));
+                
+            }, 1000); // Check every second
+        }
+        
+        // Function to show the alert
+        function showAlert() {
+            const alertModal = document.getElementById('alertModal');
+            const alertSound = document.getElementById('alertSound');
+            const volume = document.getElementById('alertVolume').value;
+            
+            alertActive = true;
+            alertModal.style.display = 'flex';
+            
+            // Set volume and play alert sound
+            alertSound.volume = volume;
+            alertSound.play();
+        }
+        
+        // Close the alert
+        document.getElementById('alertClose').addEventListener('click', function() {
+            document.getElementById('alertModal').style.display = 'none';
+            alertActive = false;
+        });
+        
+        // Initialize fire detection when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            setupFireDetection();
+        });
+    </script>
+</body>
+</html>

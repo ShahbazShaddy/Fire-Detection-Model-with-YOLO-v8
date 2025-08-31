@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Detection Results - FireGuard AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .result-section {
+            padding: 60px 20px;
+            text-align: center;
+            min-height: calc(100vh - 180px);
+        }
+        
+        .video-container {
+            max-width: 800px;
+            margin: 30px auto;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .video-container video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .result-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 800px;
+            margin: 0 auto 30px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        .result-info i {
+            color: #ff4500;
+            margin-right: 10px;
+        }
+        
+        .timestamp {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 15px;
+        }
+        
+        .action-buttons {
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <header class="minimal-header">
+        <nav>
+            <div class="logo">
+                <h1>FireGuard<span>AI</span></h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                <li><a href="{{ url_for('demo') }}">Upload Video</a></li>
+                <li><a href="{{ url_for('live') }}">Live Demo</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <section class="result-section">
+        <div class="container">
+            <h2>Fire Detection Results</h2>
+            
+            <div class="result-info">
+                <p><i class="fas fa-info-circle"></i> {{ message }}</p>
+                <p class="timestamp">Processed at: {{ timestamp.strftime('%Y-%m-%d %H:%M:%S') }} UTC</p>
+            </div>
+            
+            <div class="video-container">
+                <video controls autoplay>
+                    <source src="{{ url_for('outputs', filename=video_file) }}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            
+            <div class="action-buttons">
+                <a href="{{ url_for('demo') }}" class="btn secondary-btn">
+                    <i class="fas fa-upload"></i> Process Another Video
+                </a>
+                <a href="{{ url_for('live') }}" class="btn secondary-btn">
+                    <i class="fas fa-camera"></i> Try Live Detection
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2023 FireGuard AI. All rights reserved.</p>
+    </footer>
+</body>
+</html>

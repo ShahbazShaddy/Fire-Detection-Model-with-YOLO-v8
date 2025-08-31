@@ -1,1 +1,6 @@
 .venv
+uploads/
+static/outputs/
+__pycache__/
+video/
+Fire_Detection_Model.ipynb/

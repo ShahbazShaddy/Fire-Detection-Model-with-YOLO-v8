@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing Video - Fire Detection AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .processing-section {
+            padding: 60px 20px;
+            text-align: center;
+            min-height: calc(100vh - 180px);
+        }
+        
+        .video-container {
+            max-width: 800px;
+            margin: 30px auto;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        
+        .video-container img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .processing-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 800px;
+            margin: 0 auto 30px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        .processing-info i {
+            color: #ff4500;
+            margin-right: 10px;
+        }
+        
+        .filename {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .processing-message {
+            margin-top: 20px;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        
+        .action-buttons {
+            margin-top: 30px;
+        }
+        
+        .overlay-text {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        /* Alert Modal Styles */
+        .alert-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .alert-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            position: relative;
+            animation: alert-appear 0.3s ease-out;
+            border-top: 5px solid #ff4500;
+        }
+        
+        @keyframes alert-appear {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .alert-content h3 {
+            color: #ff4500;
+            margin-bottom: 15px;
+            font-size: 1.8rem;
+        }
+        
+        .alert-content p {
+            margin-bottom: 20px;
+            font-size: 1.1rem;
+        }
+        
+        .alert-close {
+            background-color: #ff4500;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        .alert-close:hover {
+            background-color: #e03d00;
+        }
+        
+        .alert-icon {
+            font-size: 3rem;
+            color: #ff4500;
+            margin-bottom: 15px;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <header class="minimal-header">
+        <nav>
+            <div class="logo">
+                <h1>FireGuard<span>AI</span></h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                <li><a href="{{ url_for('demo') }}">Upload Video</a></li>
+                <li><a href="{{ url_for('live') }}">Live Demo</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <section class="processing-section">
+        <div class="container">
+            <h2>Processing Video</h2>
+            
+            <div class="processing-info">
+                <p><i class="fas fa-info-circle"></i> Processing: <span class="filename">{{ original_filename }}</span></p>
+                <p class="processing-message">
+                    <i class="fas fa-spinner fa-spin"></i> 
+                    Fire detection in progress. The video will be saved when complete.
+                </p>
+            </div>
+            
+            <div class="video-container">
+                <div class="overlay-text">Live Processing</div>
+                <img src="{{ url_for('process_stream') }}" alt="Processing Video" id="videoFeed">
+            </div>
+            
+            <div class="action-buttons">
+                <a href="{{ url_for('finish_processing') }}" class="btn primary-btn" id="finish-btn">
+                    <i class="fas fa-check-circle"></i> Finish Processing
+                </a>
+            </div>
+            
+            <p class="hint">You can click "Finish Processing" when you're ready to save the results</p>
+        </div>
+    </section>
+
+    <!-- Alert Modal -->
+    <div class="alert-modal" id="alertModal">
+        <div class="alert-content">
+            <i class="fas fa-fire-alt alert-icon"></i>
+            <h3>High Confidence Fire Detected!</h3>
+            <p>A fire has been detected with over 70% confidence in the current frame.</p>
+            <button class="alert-close" id="alertClose">Acknowledge Alert</button>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2023 FireGuard AI. All rights reserved.</p>
+    </footer>
+
+    <!-- Add alert sound -->
+    <audio id="alertSound" src="{{ url_for('static', filename='alert.mp3') }}" preload="auto"></audio>
+
+    <script>
+        // Function to detect fire alerts in the video stream
+        let lastAlertTime = 0;
+        const alertCooldown = 5000; // 5 seconds between alerts
+        let alertActive = false;
+        
+        // Observer to detect fire alerts in the video frames
+        function setupFireDetection() {
+            const videoFeed = document.getElementById('videoFeed');
+            
+            // Use a polling mechanism to check for high confidence detections
+            setInterval(() => {
+                const now = Date.now();
+                if (now - lastAlertTime < alertCooldown) {
+                    return; // Still in cooldown period
+                }
+                
+                // Check for text in the current frame that indicates high confidence
+                fetch('/check_high_confidence')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.high_confidence && !alertActive) {
+                            showAlert();
+                            lastAlertTime = now;
+                        }
+                    })
+                    .catch(error => console.error('Error checking for high confidence:', error));
+                
+            }, 1000); // Check every second
+        }
+        
+        // Function to show the alert
+        function showAlert() {
+            const alertModal = document.getElementById('alertModal');
+            const alertSound = document.getElementById('alertSound');
+            
+            alertActive = true;
+            alertModal.style.display = 'flex';
+            
+            // Play alert sound
+            alertSound.play();
+        }
+        
+        // Close the alert
+        document.getElementById('alertClose').addEventListener('click', function() {
+            document.getElementById('alertModal').style.display = 'none';
+            alertActive = false;
+        });
+        
+        // Initialize fire detection when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            setupFireDetection();
+            
+            // Optional: Automatically redirect after some time
+            setTimeout(function() {
+                document.getElementById('finish-btn').classList.add('pulse');
+            }, 15000); // 15 seconds
+        });
+    </script>
+</body>
+</html>
