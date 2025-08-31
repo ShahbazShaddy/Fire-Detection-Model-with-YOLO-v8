@@ -1,5 +1,6 @@
 from app import app
 
 if __name__ == "__main__":
-    # Fallback for local debug (not used in container normally)
+    # Only used for local development
+    # In production, this file is loaded by Gunicorn
     app.run(host="0.0.0.0", port=5000)

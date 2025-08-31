@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: fire-detection
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --workers 1 --threads 2 --timeout 120
+    envVars:
+      - key: FLASK_DEBUG
+        value: false
+      - key: YOLO_CONFIG_DIR
+        value: /tmp
+      - key: PYTHON_VERSION
+        value: 3.10.0
+    healthCheckPath: /healthz

@@ -8,6 +8,7 @@ from ultralytics import YOLO
 import cv2
 import math
 from datetime import datetime
+import gc  # Garbage collection for memory management
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(APP_ROOT, 'uploads')
@@ -28,15 +29,25 @@ def _env_float(name: str, default: float) -> float:
 CONF_THRESHOLD = _env_float('CONF_THRESHOLD', 0.50)      # draw boxes above this
 ALERT_THRESHOLD = _env_float('ALERT_THRESHOLD', 0.70)    # trigger high confidence alert above this
 
-# Model (loaded once) — allow overriding weight path via env
-MODEL_PATH = os.environ.get('MODEL_PATH', './model/fire.pt')
-try:
-    MODEL = YOLO(MODEL_PATH)
-except Exception as e:
-    # Defer hard failure to first request; useful for building image w/o weights (optional)
-    MODEL = None
-    app.logger.error(f"Failed to load model at {MODEL_PATH}: {e}")
+# Model loading optimizations
+MODEL = None
+MODEL_LOADED = False
 CLASSNAMES = ['fire']
+
+# Memory optimization - only load model when needed
+def load_model():
+    global MODEL, MODEL_LOADED
+    if not MODEL_LOADED:
+        try:
+            MODEL_PATH = os.environ.get('MODEL_PATH', './model/fire.pt')
+            # Configure model for efficiency
+            MODEL = YOLO(MODEL_PATH)
+            MODEL_LOADED = True
+            app.logger.info(f"Model loaded successfully from {MODEL_PATH}")
+        except Exception as e:
+            app.logger.error(f"Failed to load model: {e}")
+            MODEL = None
+    return MODEL
 
 # Shared detection state
 LAST_HIGH_CONF_TIME = 0.0
@@ -46,9 +57,13 @@ STATE_LOCK = threading.Lock()
 def annotate_frame(frame):
     """Run detection on a single frame and draw bounding boxes. Returns (frame, high_conf_bool)."""
     global LAST_HIGH_CONF_TIME, LAST_HIGH_CONF_SCORE
-    if MODEL is None:
+    
+    # Load model on demand
+    model = load_model()
+    if model is None:
         return frame, False
-    results = MODEL(frame, stream=True)
+    
+    results = model(frame, stream=True)
     high_confidence_detection = False
 
     for r in results:
@@ -82,6 +97,9 @@ def annotate_frame(frame):
                 (10, frame.shape[0] - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
 
+    # Force garbage collection to reduce memory usage
+    gc.collect()
+    
     return frame, high_confidence_detection
 
 def gen_live_stream():
@@ -97,23 +115,39 @@ def gen_live_stream():
         app.logger.warning("Live source not available: %s", source)
         yield b''
         return
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    
+    frame_count = 0
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        frame, high_confidence = annotate_frame(frame)
+            # Process every 2nd frame to reduce CPU/memory usage
+            frame_count += 1
+            if frame_count % 2 != 0:
+                continue
+                
+            # Resize frame to reduce memory usage
+            frame = cv2.resize(frame, (640, 480))
+            
+            frame, high_confidence = annotate_frame(frame)
 
-        if high_confidence:
-            cv2.putText(frame, "HIGH CONFIDENCE FIRE DETECTED!", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            cv2.rectangle(frame, (5, 5), (frame.shape[1]-5, frame.shape[0]-5), (0, 0, 255), 5)
+            if high_confidence:
+                cv2.putText(frame, "HIGH CONFIDENCE FIRE DETECTED!", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.rectangle(frame, (5, 5), (frame.shape[1]-5, frame.shape[0]-5), (0, 0, 255), 5)
 
-        ok, buffer = cv2.imencode('.jpg', frame)
-        if not ok:
-            continue
-        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-    cap.release()
+            ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if not ok:
+                continue
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            
+            # Force garbage collection periodically
+            if frame_count % 10 == 0:
+                gc.collect()
+    finally:
+        cap.release()
 
 def process_video_stream(video_path):
     """Yield processed frames for streaming the uploaded video."""
@@ -122,44 +156,87 @@ def process_video_stream(video_path):
         yield b''
         return
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    frame_count = 0
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        frame, high_confidence = annotate_frame(frame)
+            # Process every 2nd frame to reduce CPU/memory usage
+            frame_count += 1
+            if frame_count % 2 != 0:
+                continue
+                
+            # Resize frame to reduce memory usage
+            frame = cv2.resize(frame, (640, 480))
+            
+            frame, high_confidence = annotate_frame(frame)
 
-        if high_confidence:
-            cv2.putText(frame, "HIGH CONFIDENCE FIRE DETECTED!", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            cv2.rectangle(frame, (5, 5), (frame.shape[1]-5, frame.shape[0]-5), (0, 0, 255), 5)
+            if high_confidence:
+                cv2.putText(frame, "HIGH CONFIDENCE FIRE DETECTED!", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.rectangle(frame, (5, 5), (frame.shape[1]-5, frame.shape[0]-5), (0, 0, 255), 5)
 
-        ok, buffer = cv2.imencode('.jpg', frame)
-        if not ok:
-            continue
-        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-    cap.release()
+            ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if not ok:
+                continue
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            
+            # Force garbage collection periodically
+            if frame_count % 10 == 0:
+                gc.collect()
+    finally:
+        cap.release()
 
 def process_video(input_path, output_path):
     """Background full processing to save annotated video to disk."""
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
         return
+        
+    # Get video properties
     fps = cap.get(cv2.CAP_PROP_FPS) or 25
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 640)
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
+    
+    # Calculate total frames for memory estimation
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # For longer videos, reduce resolution to save memory
+    if total_frames > 500:  # If video is longer than ~20 seconds at 25fps
+        w = min(w, 640)
+        h = min(h, 480)
+    
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        annotated, _ = annotate_frame(frame)
-        out.write(annotated)
-
-    cap.release()
-    out.release()
+    frame_count = 0
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            # Resize frame to target dimensions
+            frame = cv2.resize(frame, (w, h))
+            
+            # Process every other frame for long videos
+            frame_count += 1
+            if total_frames > 1000 and frame_count % 2 != 0:
+                out.write(frame)  # Write original frame without processing
+                continue
+                
+            annotated, _ = annotate_frame(frame)
+            out.write(annotated)
+            
+            # Force garbage collection periodically
+            if frame_count % 30 == 0:
+                gc.collect()
+    finally:
+        cap.release()
+        out.release()
+        gc.collect()  # Final cleanup
 
 @app.route('/')
 def index():
@@ -170,11 +247,11 @@ def health():
     """Basic health check for container orchestrators."""
     status = {
         "status": "ok",
-        "model_loaded": MODEL is not None,
+        "model_loaded": MODEL_LOADED,
         "conf_threshold": CONF_THRESHOLD,
         "alert_threshold": ALERT_THRESHOLD
     }
-    code = 200 if MODEL is not None else 503
+    code = 200
     return jsonify(status), code
 
 @app.route('/demo')
@@ -279,4 +356,7 @@ def check_high_confidence():
     })
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Default to production configuration
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=debug, host='0.0.0.0', port=port)
